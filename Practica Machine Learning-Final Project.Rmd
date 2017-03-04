@@ -1,0 +1,202 @@
+---
+title: ' Predict the manner of the exercise'
+author: "Anand Kumar Subramaniam"
+date: "February 28, 2017"
+output:
+  html_document: default
+  pdf_document: default
+---
+### Introduction
+  In this project, the  data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants (wearables) are used. The goal of the project is to predict the manner in which the participants did the exercise. This is the "classe" variable in the training set. 
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### STEP1: Load the necessary libraries
+```{r warning=FALSE, message=FALSE}
+  library(caret)
+  library(ggplot2)
+  library(dplyr)
+  library(rattle)
+  library(corrplot)
+  library(rpart)
+  library(rpart.plot)
+```
+
+### STEP 2: Read the training and testing Data
+```{r Read the Training and Test set}
+
+    TrainingSet_org <-   read.csv("pml-training.csv",na.strings=c("", "NA", "NULL"))
+    PredictSet <- read.csv("pml-testing.csv", na.strings=c("", "NA", "NULL"))
+    
+    dim(TrainingSet_org)
+    dim(PredictSet)
+```
+
+### STEP 3: Preprocess the data 
+```{r PreProcess the data warning=FALSE, message=FALSE}
+    #. 1.Remove columns that has  NA Values
+    New_TrainingSet <- TrainingSet_org[, colSums(is.na(TrainingSet_org))==0]
+    dim(New_TrainingSet)
+    # New Training set has only 60 columns.
+    remove(TrainingSet_org)
+    
+    # colnames(New_TrainingSet)
+    # 2. Remove  unnecessary predictors which are not related to the outcome Classe like the     #    following Predictors
+      # 1. X
+      # 2. "user_name"
+      # 3. raw_timestamp_part_1
+      # 4. raw_timestamp_part_2
+      # 5. cvtd_timestamp
+      # 6. new_window
+      # 7. num_window
+     New_TrainingSet <- New_TrainingSet[,-(1:7)]
+    dim(New_TrainingSet)
+    # New Training set has only 53 columns.
+      
+    # check for variables that have very low variance.
+    # NonZeroVar Predictors: Remove predictors that have one unique value across samples (zero variance predictors).          # Function used is Caret NonZeroVar which removes predictors that have both 
+    # 1) few unique values relative to the number of samples and 
+    # 2) large ratio of the frequency of the most common value to the frequency of the second most common value (near-zero     #    variance predictors).
+    Zero_Variance = nearZeroVar(New_TrainingSet, saveMetrics = TRUE)
+    summary(Zero_Variance) # understand the  structure of Zero_variance results
+    Zero_Variance[Zero_Variance[, 'nzv'] > 0, ] 
+    New_TrainingSet_nzv = New_TrainingSet[,Zero_Variance[, 'nzv']==0]
+    dim(New_TrainingSet_nzv)
+    # No predictors were eliminated based on Non-Zero Variance effort.
+```
+
+### STEP 4: Find and remove Highly correlated predictors 
+
+```{r warning=FALSE, message=FALSE}
+    CorPredictors <- cor(na.omit(New_TrainingSet_nzv[, -which(names(New_TrainingSet_nzv) %in% c("classe"))]))
+  
+    # Plot the Correlation
+    
+    
+    corrplot( CorPredictors , method="circle")
+  
+    RemovePredictors = findCorrelation(CorPredictors, cutoff = .90, verbose = TRUE)
+    
+    # Names of the Predictors that are highly correlated > 90%
+    colnames(New_TrainingSet_nzv[,RemovePredictors])
+    
+    # Remove the highly correlated predictors from the trainingset.
+    New_TrainingSet_nzv_cor = New_TrainingSet_nzv[,-RemovePredictors]
+    
+    # Final cleaned Training Set
+    dim(New_TrainingSet_nzv_cor)
+    
+    #head(New_TrainingSet_nzv_cor)
+```
+
+  Final Pre-processed training set with 46 predictors.
+
+### STEP 5: Create Training and Test data partition. 
+```{r results=FALSE, message=FALSE, results="hide"}
+    inTrain <- createDataPartition (y=New_TrainingSet_nzv_cor$classe, p=0.7, list=FALSE) #Create Partition
+    TrainingSet <- New_TrainingSet_nzv_cor[inTrain,] # 70% Training
+    TestingSet <- New_TrainingSet_nzv_cor[-inTrain,] # 30% Testing.
+   
+```
+  The **TrainingSet** consist of **`r dim(TrainingSet)[1] ` samples** and **`r dim(TrainingSet)[2] ` variables**.
+  
+  The **TestingSet**  consist of **`r dim(TestingSet)[1] `  samples** and **`r dim(TestingSet)[2] `  variables**.
+
+### STEP 6: Model Analysis.
+
+```{r warning=FALSE, message=FALSE }
+
+  set.seed(1)
+  # 1. Random forest
+  RF_ModelFit <- train( classe~ ., data = TrainingSet, method ="rf", maxdepth=100  )
+  RF_ModelFit$finalModel
+
+  RF_Predict <- predict(RF_ModelFit, newdata = TestingSet)
+  
+  RF_ConfResult<- confusionMatrix(RF_Predict, TestingSet$classe)
+  
+  #2. Recursive Partitioning
+  RPart_ModelFit <- train( classe~ ., data = TrainingSet, method ="rpart")
+  RPart_ModelFit$finalModel
+  fancyRpartPlot(RPart_ModelFit$finalModel)
+  
+  Rpart_Predict <- predict(RPart_ModelFit, newdata = TestingSet)
+  Rpart_ConfResult <- confusionMatrix(Rpart_Predict, TestingSet$classe)
+  
+  
+  #3. Try Neural network
+  
+  nnet_ModelFit <- train( classe~ ., data = TrainingSet, method ="nnet", trace =FALSE)
+  nnet_ModelFit$finalModel
+  
+  nnet_Predict <- predict(nnet_ModelFit, newdata = TestingSet)
+  nnet_ConfResult <- confusionMatrix(nnet_Predict, TestingSet$classe)
+  
+```
+### STEP 7: Compare Models Accuracy
+
+  **Random Forest** has the **accuracy** of **`r RF_ConfResult$overall[1]`** which far better than the recursive partitioning accuracy which has the accuracy of **`r Rpart_ConfResult$overall[1]`** and neural network's accuracy of **`r nnet_ConfResult$overall[1]`**  
+  
+  The **Random forest reference table**  below shows the prediction using this model which shows the predictions are pretty close to actuals.
+  **`r RF_ConfResult$table`**. 
+
+ Let's do a Repeated k-fold Cross Validation on Random Forest Accuracy
+
+### STEP 8: Random Forest Cross Validation
+  Inorder to reduce the bias on few predictors, lets do a cross validation by randomly selecting the number of predictors.
+```{r warning=FALSE, message=FALSE}
+  # define training control
+  train_control <- trainControl(method="repeatedcv", number=10, repeats=3, search="random")
+  set.seed(1)
+  
+  #set grid parameter
+  grid <- expand.grid(.mtry = c(1:15)) #sqrt(ncol(TrainingSet)))
+  
+  library(klaR)
+  
+  # train the model
+  rf_Random_model <- train(classe ~ .,
+                          data = TrainingSet,
+                          metric = "Accuracy",
+                          trControl=train_control,
+                          tunelength=15,
+                          method="rf",
+                          tuneGrid=data.frame(grid))
+ 
+ 
+  # summarize results
+  print(rf_Random_model)
+```
+
+  The summary shows the random forest for resampled using Cross-validation 10 folds. Inorder to avoid bias, the model uses a random search. As the summary says the final value used for **mtry** was **7**.
+```{r warning=FALSE, message=FALSE}
+  #
+  plot(rf_Random_model)
+  
+```
+
+  The plot shows the maximum accuracy of **`r rf_Random_model$results[order(-rf_Random_model$results$Accuracy),][1,2]*100`**% is obtained when the **mtry** equals to **`rf_Random_model$results[order(-rf_Random_model$results$Accuracy),][1,1]`** which is the final value used in the model.
+  
+### STEP 8: Out of Sample Error
+  In order to estimate the out-of-sample accuracy, we need to train the data on one dataset (which we did using the TrainingSet), and then apply it to a new dataset (which is Testing Data Set).
+
+```{r warning=FALSE, message=FALSE}
+  RF_Random_Predict <- predict(rf_Random_model, newdata = TestingSet)
+  
+  RF_Random_ConfResult<- confusionMatrix(RF_Random_Predict, TestingSet$classe)
+  
+  print(RF_Random_ConfResult)
+
+  
+```
+  The summary shows the model was able to predict with the accuracy of **`r RF_Random_ConfResult$overall[1] `** with 7 predictors.
+  
+### Conclusion
+  Using the Random forest model, predict the values for the PredictSet part of pml-testing.csv. Apply the Random forest model with predict data set to predict function. The results are as shown.
+```{r warning=FALSE, message=FALSE}
+  Predict_Results <- predict(rf_Random_model,newdata = PredictSet)
+  Predict_Results
+```
+  
