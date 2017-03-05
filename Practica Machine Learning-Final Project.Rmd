@@ -35,7 +35,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ### STEP 3: Preprocess the data 
-```{r PreProcess the data warning=FALSE, message=FALSE}
+```{r warning=FALSE, message=FALSE}
     #. 1.Remove columns that has  NA Values
     New_TrainingSet <- TrainingSet_org[, colSums(is.na(TrainingSet_org))==0]
     dim(New_TrainingSet)
@@ -177,7 +177,7 @@ knitr::opts_chunk$set(echo = TRUE)
   
 ```
 
-  The plot shows the maximum accuracy of **`r rf_Random_model$results[order(-rf_Random_model$results$Accuracy),][1,2]*100`**% is obtained when the **mtry** equals to **`rf_Random_model$results[order(-rf_Random_model$results$Accuracy),][1,1]`** which is the final value used in the model.
+  The plot shows the maximum accuracy of **`r rf_Random_model$results[order(-rf_Random_model$results$Accuracy),][1,2]*100`**% is obtained when the **mtry** equals to **`r rf_Random_model$results[order(-rf_Random_model$results$Accuracy),][1,1]`** which is the final value used in the model.
   
 ### STEP 8: Out of Sample Error
   In order to estimate the out-of-sample accuracy, we need to train the data on one dataset (which we did using the TrainingSet), and then apply it to a new dataset (which is Testing Data Set).
